@@ -1,6 +1,20 @@
 name: ob-semantic
 
 services:
+  volume-init:
+    image: alpine:3.22
+    command:
+      - /bin/sh
+      - -c
+      - |
+          set -eu
+          echo "Initializing Semantica persistent volumes"
+          mkdir -p /data-root/falkordb/data
+          echo "Semantica volume initialization complete"
+    volumes:
+      - ${DATA_ROOT:?DATA_ROOT must be set in .env}:/data-root
+    restart: "no"
+
   explorer:
     build:
       context: .
@@ -34,8 +48,11 @@ services:
 
   falkordb:
     image: falkordb/falkordb:latest
+    depends_on:
+      volume-init:
+        condition: service_completed_successfully
     volumes:
-      - falkordb_data:/data
+      - falkordb_persistent_data:/var/lib/falkordb/data
     networks:
       - db-net
     restart: unless-stopped
@@ -52,4 +69,9 @@ networks:
     name: ob-net-db
 
 volumes:
-  falkordb_data:
+  falkordb_persistent_data:
+    driver: local
+    driver_opts:
+      type: none
+      device: ${DATA_ROOT:?DATA_ROOT must be set in .env}/falkordb/data
+      o: bind

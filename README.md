@@ -1475,11 +1475,18 @@ Traefik reaches Explorer through the stable `semantica-explorer:8000` alias on
 `ob-net-front`. Other platform containers call
 `http://semantica-explorer:8000/api/...` directly on `ob-net-back` and provide
 `X-API-Key`; they must not route internal traffic back through Traefik. The
-authenticated browser UI is `https://ob-semantica.shared.mpn`. Its same-origin
+authenticated browser UI is `https://ob-sementic.shared.mpn`. Its same-origin
 `/api/*` and `/ws/*` paths are UI implementation dependencies protected by
 Authelia, not a public machine API. The only unauthenticated public endpoint is
 `https://api.ob-project.shared.mpn/semantica/api/health`. FalkorDB has no
 host-published port.
+
+FalkorDB data is persisted at `${DATA_ROOT}/falkordb/data`. The one-shot
+`volume-init` service creates this directory before FalkorDB starts, following
+the OB platform volume convention. The Docker volume is a bind-backed local
+volume, so recreating the database container does not remove its data.
+It is mounted at FalkorDB's effective Redis data directory,
+`/var/lib/falkordb/data`.
 
 ---
 
