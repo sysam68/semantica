@@ -9,6 +9,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-08-21
+
+### Added
+
+- Shared Qdrant vector-store configuration compatible with the OB Mem0 deployment.
+- Persistent FalkorDB storage below `DATA_ROOT`, initialized before database startup.
+- Stable internal Docker endpoint at `http://semantica-explorer:8000`.
+
+### Changed
+
+- Explorer now runs in the `ob-semantic` Compose project on the OB front, back, and database networks.
+- Anonymous Explorer access is disabled and `SEMANTICA_API_KEY` is required.
+- Explorer and FalkorDB no longer publish host ports; ingress is governed by OB-SEC.
+- The supported browser endpoint is `https://ob-semantic.shared.mpn`.
+
+### Security
+
+- Browser access is designed for Authelia-protected reverse-proxy ingress with server-side API-key injection.
+- Machine clients use the internal Docker endpoint and provide their own `X-API-Key` header.
+- Only the exact health-check endpoint is intended for unauthenticated public monitoring.
+
 ## [0.6.6] - 2026-08-20
 
 ### Added

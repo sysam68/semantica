@@ -142,7 +142,7 @@ compliant = graph.check_decision_rules({"category": "vendor_selection"})  # poli
 ```bash
 semantica doctor
 # Python 3.11.9         pass
-# semantica 0.6.6       pass
+# semantica 0.7.0       pass
 # faiss vector store    pass
 # Config file           pass    ~/.semantica/config.yaml
 ```
@@ -1487,6 +1487,17 @@ the OB platform volume convention. The Docker volume is a bind-backed local
 volume, so recreating the database container does not remove its data.
 It is mounted at FalkorDB's effective Redis data directory,
 `/var/lib/falkordb/data`.
+
+---
+
+## What's New in v0.7.0
+
+Semantica now integrates directly with the OB platform: shared Mem0 Qdrant,
+persistent FalkorDB storage below `DATA_ROOT`, segmented Docker networks, and
+an authenticated Explorer at `https://ob-semantic.shared.mpn`. Internal clients
+use `http://semantica-explorer:8000` without routing back through Traefik.
+
+→ [Changelog](CHANGELOG.md)
 
 ---
 
