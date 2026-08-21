@@ -1464,13 +1464,22 @@ semantica-explorer --graph my_graph.json
 
 For contributor / dev-server setup: **[explorer/README.md: Local Setup Guide](explorer/README.md)**
 
-The Docker Compose deployment expects the platform networks `ob-net-back` and
-`ob-net-db` to be created by OB-SEC. Explorer joins both networks because it is
-a backend that accesses databases; FalkorDB joins `ob-net-db` only. Copy
-`.env.example` to `.env` to configure the shared Mem0 Qdrant endpoint before
-starting the stack. The local Explorer port defaults to `127.0.0.1:8001` to
-avoid colliding with other platform APIs; platform traffic reaches port `8000`
-inside `ob-net-back`. FalkorDB has no host-published port.
+The Docker Compose deployment expects the platform networks `ob-net-front`,
+`ob-net-back`, and `ob-net-db` to be created by OB-SEC. Explorer joins all three
+networks; FalkorDB joins `ob-net-db` only. Copy `.env.example` to `.env`, set a
+non-empty `SEMANTICA_API_KEY`, and configure the shared Mem0 Qdrant endpoint
+before starting the stack. Anonymous access is disabled and Explorer has no
+host-published port.
+
+Traefik reaches Explorer through the stable `semantica-explorer:8000` alias on
+`ob-net-front`. Other platform containers call
+`http://semantica-explorer:8000/api/...` directly on `ob-net-back` and provide
+`X-API-Key`; they must not route internal traffic back through Traefik. The
+authenticated browser UI is `https://ob-semantica.shared.mpn`. Its same-origin
+`/api/*` and `/ws/*` paths are UI implementation dependencies protected by
+Authelia, not a public machine API. The only unauthenticated public endpoint is
+`https://api.ob-project.shared.mpn/semantica/api/health`. FalkorDB has no
+host-published port.
 
 ---
 

@@ -12,9 +12,9 @@ services:
       ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:8000,http://127.0.0.1:8000}
       # Required for API access - the Explorer refuses all protected routes
       # (503) until this is set. Generate one with `openssl rand -hex 32`.
-      SEMANTICA_API_KEY: ${SEMANTICA_API_KEY:-}
+      SEMANTICA_API_KEY: ${SEMANTICA_API_KEY:?SEMANTICA_API_KEY must be set in .env}
       # Trusted local-only setups only: bypasses the API key entirely.
-      SEMANTICA_ALLOW_ANONYMOUS: ${SEMANTICA_ALLOW_ANONYMOUS:-false}
+      SEMANTICA_ALLOW_ANONYMOUS: "false"
       VECTOR_STORE_DEFAULT_BACKEND: ${VECTOR_STORE_DEFAULT_BACKEND:-qdrant}
       VECTOR_STORE_DIMENSION: ${VECTOR_STORE_DIMENSION:-768}
       VECTOR_STORE_QDRANT_URL: ${VECTOR_STORE_QDRANT_URL:-http://qdrant-mem0:6333}
@@ -22,11 +22,14 @@ services:
     depends_on:
       falkordb:
         condition: service_started
-    ports:
-      - "${SEMANTICA_EXPLORER_BIND_HOST:-127.0.0.1}:${SEMANTICA_EXPLORER_PORT:-8001}:8000"
     networks:
-      - back-net
-      - db-net
+      front-net:
+        aliases:
+          - semantica-explorer
+      back-net:
+        aliases:
+          - semantica-explorer
+      db-net: {}
     restart: unless-stopped
 
   falkordb:
@@ -38,6 +41,9 @@ services:
     restart: unless-stopped
 
 networks:
+  front-net:
+    external: true
+    name: ob-net-front
   back-net:
     external: true
     name: ob-net-back
