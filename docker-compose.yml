@@ -1,3 +1,5 @@
+name: ob-semantic
+
 services:
   explorer:
     build:
