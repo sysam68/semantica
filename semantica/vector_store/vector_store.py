@@ -111,8 +111,14 @@ class VectorStore:
 
     SUPPORTED_BACKENDS = {"faiss", "weaviate", "qdrant", "milvus", "pinecone", "pgvector", "inmemory", "sqlite"}
 
-    def __init__(self, backend="faiss", config=None, max_workers: int = 6, **kwargs):
+    def __init__(self, backend=None, config=None, max_workers: int = 6, **kwargs):
         """Initialize vector store."""
+        if backend is None:
+            from .config import vector_store_config
+
+            config = config or vector_store_config.get_all()
+            backend = config.get("default_backend", "faiss")
+
         if backend.lower() not in self.SUPPORTED_BACKENDS:
             raise ValueError(
                 f"Unsupported backend: {backend}. "
@@ -210,9 +216,13 @@ class VectorStore:
                 
             elif self.backend == "qdrant":
                 from .qdrant_store import QdrantStore
-                self._backend_store = QdrantStore(
-                    **self.config
-                )
+
+                qdrant_config = self.config.copy()
+                if "url" not in qdrant_config and "qdrant_url" in qdrant_config:
+                    qdrant_config["url"] = qdrant_config["qdrant_url"]
+                if "api_key" not in qdrant_config and "qdrant_api_key" in qdrant_config:
+                    qdrant_config["api_key"] = qdrant_config["qdrant_api_key"]
+                self._backend_store = QdrantStore(**qdrant_config)
                 self.logger.info(f"Initialized QdrantStore backend")
                 
             elif self.backend == "pinecone":

@@ -367,22 +367,25 @@ class TestVectorStoreDeepDive(unittest.TestCase):
 
     def test_config(self):
         """Test VectorStoreConfig."""
-        from semantica.vector_store.config import vector_store_config
+        from semantica.vector_store.config import VectorStoreConfig
+
+        with patch.dict("os.environ", {}, clear=True):
+            config = VectorStoreConfig()
         
         # Test get default
-        self.assertEqual(vector_store_config.get("default_backend"), "faiss")
+        self.assertEqual(config.get("default_backend"), "faiss")
         
         # Test set
-        vector_store_config.set("test_key", "test_value")
-        self.assertEqual(vector_store_config.get("test_key"), "test_value")
+        config.set("test_key", "test_value")
+        self.assertEqual(config.get("test_key"), "test_value")
         
         # Test update
-        vector_store_config.update({"test_key_2": "val2"})
-        self.assertEqual(vector_store_config.get("test_key_2"), "val2")
+        config.update({"test_key_2": "val2"})
+        self.assertEqual(config.get("test_key_2"), "val2")
         
         # Test method config
-        vector_store_config.set_method_config("test_method", {"param": 1})
-        self.assertEqual(vector_store_config.get_method_config("test_method")["param"], 1)
+        config.set_method_config("test_method", {"param": 1})
+        self.assertEqual(config.get_method_config("test_method")["param"], 1)
 
     def test_hybrid_search_backend_delegation(self):
         """Test HybridSearch delegation to non-inmemory backends."""

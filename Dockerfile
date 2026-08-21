@@ -9,7 +9,7 @@ RUN npm ci
 COPY explorer/ ./
 RUN mkdir -p /app/semantica && npm run build
 
-FROM python:3.14-slim AS runtime
+FROM python:3.12-slim AS runtime
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
@@ -27,7 +27,7 @@ COPY semantica/ ./semantica/
 COPY integrations/ ./integrations/
 COPY --from=frontend-builder /app/semantica/static ./semantica/static
 
-RUN pip install --no-cache-dir ".[explorer]" \
+RUN pip install --no-cache-dir ".[explorer,vectorstore-qdrant]" \
     && chown -R semantica:semantica /app
 
 USER semantica

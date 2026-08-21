@@ -118,6 +118,7 @@ class VectorStoreConfig:
             "VECTOR_STORE_FAISS_INDEX_TYPE": "faiss_index_type",
             "VECTOR_STORE_WEAVIATE_URL": "weaviate_url",
             "VECTOR_STORE_QDRANT_URL": "qdrant_url",
+            "VECTOR_STORE_QDRANT_API_KEY": "qdrant_api_key",
             "VECTOR_STORE_MILVUS_HOST": "milvus_host",
             "VECTOR_STORE_MILVUS_PORT": "milvus_port",
             "VECTOR_STORE_SQLITE_PATH": "sqlite_path",
