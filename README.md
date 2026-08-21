@@ -1464,6 +1464,14 @@ semantica-explorer --graph my_graph.json
 
 For contributor / dev-server setup: **[explorer/README.md: Local Setup Guide](explorer/README.md)**
 
+The Docker Compose deployment expects the platform networks `ob-net-back` and
+`ob-net-db` to be created by OB-SEC. Explorer joins both networks because it is
+a backend that accesses databases; FalkorDB joins `ob-net-db` only. Copy
+`.env.example` to `.env` to configure the shared Mem0 Qdrant endpoint before
+starting the stack. The local Explorer port defaults to `127.0.0.1:8001` to
+avoid colliding with other platform APIs; platform traffic reaches port `8000`
+inside `ob-net-back`. FalkorDB has no host-published port.
+
 ---
 
 ## What's New in v0.6.6

@@ -13,28 +13,35 @@ services:
       SEMANTICA_API_KEY: ${SEMANTICA_API_KEY:-}
       # Trusted local-only setups only: bypasses the API key entirely.
       SEMANTICA_ALLOW_ANONYMOUS: ${SEMANTICA_ALLOW_ANONYMOUS:-false}
+      VECTOR_STORE_DEFAULT_BACKEND: ${VECTOR_STORE_DEFAULT_BACKEND:-qdrant}
+      VECTOR_STORE_DIMENSION: ${VECTOR_STORE_DIMENSION:-768}
+      VECTOR_STORE_QDRANT_URL: ${VECTOR_STORE_QDRANT_URL:-http://qdrant-mem0:6333}
+      VECTOR_STORE_QDRANT_API_KEY: ${VECTOR_STORE_QDRANT_API_KEY:-}
     depends_on:
       falkordb:
         condition: service_started
     ports:
-      - "8000:8000"
+      - "${SEMANTICA_EXPLORER_BIND_HOST:-127.0.0.1}:${SEMANTICA_EXPLORER_PORT:-8001}:8000"
     networks:
-      - semantica
+      - back-net
+      - db-net
     restart: unless-stopped
 
   falkordb:
     image: falkordb/falkordb:latest
-    ports:
-      - "6379:6379"
     volumes:
       - falkordb_data:/data
     networks:
-      - semantica
+      - db-net
     restart: unless-stopped
 
 networks:
-  semantica:
-    driver: bridge
+  back-net:
+    external: true
+    name: ob-net-back
+  db-net:
+    external: true
+    name: ob-net-db
 
 volumes:
   falkordb_data:
