@@ -27,7 +27,7 @@ COPY semantica/ ./semantica/
 COPY integrations/ ./integrations/
 COPY --from=frontend-builder /app/semantica/static ./semantica/static
 
-RUN pip install --no-cache-dir ".[explorer,vectorstore-qdrant]" \
+RUN pip install --no-cache-dir ".[explorer,vectorstore-qdrant,graph-falkordb]" \
     && chown -R semantica:semantica /app
 
 USER semantica

@@ -23,6 +23,9 @@ services:
     environment:
       FALKORDB_HOST: falkordb
       FALKORDB_PORT: "6379"
+      FALKORDB_GRAPH_NAME: ${FALKORDB_GRAPH_NAME:-semantica_explorer}
+      SEMANTICA_GRAPH_NAMESPACE: ${SEMANTICA_GRAPH_NAMESPACE:-default}
+      SEMANTICA_PERSISTENCE_REQUIRED: "true"
       ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:8000,http://127.0.0.1:8000}
       # Required for API access - the Explorer refuses all protected routes
       # (503) until this is set. Generate one with `openssl rand -hex 32`.
@@ -35,7 +38,7 @@ services:
       VECTOR_STORE_QDRANT_API_KEY: ${VECTOR_STORE_QDRANT_API_KEY:-}
     depends_on:
       falkordb:
-        condition: service_started
+        condition: service_healthy
     networks:
       front-net:
         aliases:
@@ -55,6 +58,12 @@ services:
       - falkordb_persistent_data:/var/lib/falkordb/data
     networks:
       - db-net
+    healthcheck:
+      test: ["CMD", "redis-cli", "PING"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
     restart: unless-stopped
 
 networks:

@@ -12,8 +12,9 @@ from datetime import UTC, datetime
 from typing import Any, Dict, Iterable, List, Optional
 
 from ..context.context_graph import ContextGraph, _resolve_edge_identity
-from .search_index import GraphSearchIndex
 from ..utils.skos import is_skos_hierarchy_edge, validate_skos_hierarchy
+from .ports import GraphSnapshotRepository
+from .search_index import GraphSearchIndex
 
 _KG_AVAILABLE = False
 try:
@@ -42,9 +43,11 @@ class GraphSession:
         self,
         graph: ContextGraph,
         provenance_storage_path: Optional[str] = None,
+        snapshot_repository: Optional[GraphSnapshotRepository] = None,
     ) -> None:
         self.graph = graph
         self._provenance_storage_path = provenance_storage_path
+        self._snapshot_repository = snapshot_repository
         self._lock = threading.RLock()
         self._search_index = GraphSearchIndex()
 
@@ -64,6 +67,21 @@ class GraphSession:
         self._cached_embeddings: Optional[Dict[str, List[float]]] = None
         self._cached_graph_revision: int = -1
         self.rebuild_search_index()
+
+    @property
+    def persistence_enabled(self) -> bool:
+        return self._snapshot_repository is not None
+
+    def persist_graph(self) -> None:
+        if self._snapshot_repository is not None:
+            self._snapshot_repository.save(self.graph.to_dict())
+
+    def persistence_healthy(self) -> bool:
+        return self._snapshot_repository is None or self._snapshot_repository.health()
+
+    def close(self) -> None:
+        if self._snapshot_repository is not None:
+            self._snapshot_repository.close()
 
     @classmethod
     def from_file(cls, path: str) -> "GraphSession":

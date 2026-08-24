@@ -12,7 +12,12 @@ from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from fastapi.responses import Response
 
 from ..dependencies import get_session
-from ..schemas import DistanceExportRequest, ExportRequest, ImportResponse
+from ..schemas import (
+    DistanceExportRequest,
+    ExportRequest,
+    ImportResponse,
+    ProblemDetails,
+)
 from ..session import GraphSession
 
 logger = logging.getLogger(__name__)
@@ -62,7 +67,20 @@ def _import_response(nodes_added: int, edges_added: int, message: str = "Import 
     )
 
 
-@router.post("/api/import", response_model=ImportResponse)
+@router.post(
+    "/api/import",
+    response_model=ImportResponse,
+    responses={
+        503: {
+            "description": "The durable graph dependency is unavailable.",
+            "content": {
+                "application/problem+json": {
+                    "schema": ProblemDetails.model_json_schema()
+                }
+            },
+        }
+    },
+)
 async def import_file(
     file: UploadFile = File(...),
     session: GraphSession = Depends(get_session),
