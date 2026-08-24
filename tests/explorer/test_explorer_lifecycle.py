@@ -340,6 +340,80 @@ def test_scoped_kind_purge_retains_other_subject_data_and_verifies_after_restart
     assert memories.json()["node_ids"] == ["retained-memory"]
 
 
+def test_publication_lifecycle_crosses_department_tenants_only_for_the_owner(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("SEMANTICA_API_KEY", "test-api-key")
+    with TestClient(create_app()) as client:
+        import_nodes(
+            client,
+            [
+                node(
+                    "private-publication-index",
+                    tenant="private_memories",
+                    artifact_id="publication-one",
+                    subject="subject-one",
+                    data_kind="publications",
+                ),
+                node(
+                    "private-publication-consent",
+                    tenant="private_memories",
+                    artifact_id="consent-one",
+                    subject="subject-one",
+                    data_kind="publications",
+                ),
+                node(
+                    "department-publication-owned",
+                    tenant="engineering",
+                    artifact_id="publication-one",
+                    subject="subject-one",
+                    data_kind="publications",
+                ),
+                node(
+                    "department-publication-foreign",
+                    tenant="engineering",
+                    artifact_id="publication-two",
+                    subject="subject-two",
+                    data_kind="publications",
+                ),
+            ],
+        )
+        enumerated = client.post(
+            "/api/lifecycle/subjects/enumerate",
+            headers={"X-API-Key": "test-api-key"},
+            json={
+                "tenant_id": "private_memories",
+                "subject_id": "subject-one",
+                "kinds": ["publications"],
+            },
+        )
+        purged = client.post(
+            "/api/lifecycle/subjects/purge",
+            headers={"X-API-Key": "test-api-key"},
+            json={
+                "tenant_id": "private_memories",
+                "subject_id": "subject-one",
+                "kinds": ["publications"],
+                "reason": "authorized publication erasure",
+            },
+        )
+        foreign = client.get(
+            "/api/graph/node/department-publication-foreign",
+            headers={"X-API-Key": "test-api-key"},
+        )
+
+    assert enumerated.status_code == 200
+    assert set(enumerated.json()["node_ids"]) == {
+        "private-publication-index",
+        "private-publication-consent",
+        "department-publication-owned",
+    }
+    assert purged.status_code == 200
+    assert purged.json()["status"] == "complete"
+    assert set(purged.json()["purged_node_ids"]) == set(enumerated.json()["node_ids"])
+    assert foreign.status_code == 200
+
+
 def test_purge_reports_provenance_residual_without_subject_content(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

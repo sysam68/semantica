@@ -35,6 +35,7 @@ LifecycleDataKind = Literal[
     "provenance",
     "consents",
     "audit_events",
+    "publications",
 ]
 
 
@@ -45,7 +46,7 @@ class LifecycleScopeRequest(BaseModel):
     artifact_ids: List[LifecycleIdentifier] = Field(
         default_factory=list, max_length=5000
     )
-    kinds: List[LifecycleDataKind] = Field(default_factory=list, max_length=8)
+    kinds: List[LifecycleDataKind] = Field(default_factory=list, max_length=9)
 
     @field_validator("kinds")
     @classmethod
