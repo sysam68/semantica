@@ -126,6 +126,10 @@ class GraphSearchIndex:
     def clear_cache(self) -> None:
         self._cache.clear()
 
+    def contains(self, node_id: str) -> bool:
+        """Return whether a node remains in the private search index."""
+        return str(node_id) in self._documents
+
     def remove(self, node_id: str, *, clear_cache: bool = True) -> None:
         existing = self._documents.pop(node_id, None)
         if existing is None:

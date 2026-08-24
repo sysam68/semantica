@@ -1511,6 +1511,30 @@ recreating containers. Physical deletion below `${DATA_ROOT}/falkordb/data`
 is an operator action reserved for an explicitly disposable data root after
 the stack is stopped and the target path has been verified.
 
+### Private lifecycle API
+
+The authenticated `/api/lifecycle/*` routes are an internal control boundary
+for backend adapters such as KNX. They are not an end-user API and retain the
+existing `X-API-Key` protection:
+
+- `POST /api/lifecycle/subjects/enumerate` resolves a bounded tenant/subject
+  scope and its dependent KNX nodes;
+- `POST /api/lifecycle/subjects/purge` irreversibly purges that scope with a
+  bounded reason and returns content-free verification evidence;
+- `POST /api/lifecycle/subjects/verify` rechecks supplied node/artifact IDs,
+  including after restart;
+- `DELETE /api/lifecycle/nodes/{node_id}` performs an explicitly scoped,
+  explicitly cascaded generic node purge.
+
+Verification reports `absent`, `residual`, or `not_configured` for direct
+lookup, enumeration, traversal, semantic recall, local vector similarity,
+provenance, temporal lookup, caches, export, durable restart recovery, orphan
+relationships, and unreferenced vectors. A configured residual makes the
+overall result `residual`; the response contains only bounded identifiers and
+counts, never subject content, credentials, or storage errors. Callers remain
+responsible for authorization, user confirmation, idempotency, and retention
+policy before invoking this private boundary.
+
 ---
 
 ## What's New in v0.7.0

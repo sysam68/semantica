@@ -76,12 +76,63 @@ class GraphSession:
         if self._snapshot_repository is not None:
             self._snapshot_repository.save(self.graph.to_dict())
 
+    def load_persisted_graph(self) -> Optional[Dict[str, Any]]:
+        if self._snapshot_repository is None:
+            return None
+        return self._snapshot_repository.load()
+
     def persistence_healthy(self) -> bool:
         return self._snapshot_repository is None or self._snapshot_repository.health()
 
     def close(self) -> None:
         if self._snapshot_repository is not None:
             self._snapshot_repository.close()
+
+    def lifecycle_nodes(self, *, limit: int) -> List[Dict[str, Any]]:
+        with self._lock:
+            if len(self.graph.nodes) > limit:
+                raise ValueError("lifecycle node limit exceeded")
+            return [
+                self.normalize_node(node.to_dict())
+                for node in self.graph.nodes.values()
+                if node is not None
+            ]
+
+    def purge_nodes_atomically(
+        self,
+        node_ids: Iterable[str],
+        *,
+        reason: str,
+        cascade: bool,
+    ) -> List[str]:
+        """Purge a bounded node set and acknowledge only its durable snapshot."""
+        with self._lock:
+            before = self.graph.to_dict()
+            previous_suspension = self.graph._suspend_mutation_callback
+            self.graph._suspend_mutation_callback = True
+            purged: List[str] = []
+            try:
+                for node_id in dict.fromkeys(str(value) for value in node_ids):
+                    if self.graph.purge_node(
+                        node_id,
+                        reason=reason,
+                        cascade=cascade,
+                    ):
+                        purged.append(node_id)
+                self.persist_graph()
+            except Exception:
+                self.graph.from_dict(before)
+                raise
+            finally:
+                self.graph._suspend_mutation_callback = previous_suspension
+            if purged:
+                self._bump_graph_revision_locked()
+                self.rebuild_search_index()
+            return purged
+
+    def search_index_contains(self, node_id: str) -> bool:
+        with self._lock:
+            return self._search_index.contains(node_id)
 
     @classmethod
     def from_file(cls, path: str) -> "GraphSession":

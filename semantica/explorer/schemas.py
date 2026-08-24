@@ -3,7 +3,7 @@ Shared Pydantic schemas for the Semantica Knowledge Explorer API.
 """
 
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Literal, Optional, Tuple
+from typing import Annotated, Any, Dict, List, Literal, Optional, Tuple
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -23,6 +23,53 @@ class ProblemDetails(BaseModel):
     status: int
     detail: str
     instance: Optional[str] = None
+
+
+LifecycleIdentifier = Annotated[str, Field(min_length=1, max_length=512)]
+
+
+class LifecycleScopeRequest(BaseModel):
+    tenant_id: str = Field(min_length=1, max_length=256)
+    subject_id: str = Field(min_length=1, max_length=256)
+    node_ids: List[LifecycleIdentifier] = Field(default_factory=list, max_length=5000)
+    artifact_ids: List[LifecycleIdentifier] = Field(
+        default_factory=list, max_length=5000
+    )
+
+
+class LifecyclePurgeRequest(LifecycleScopeRequest):
+    reason: str = Field(min_length=1, max_length=256)
+
+
+class LifecycleNodePurgeRequest(BaseModel):
+    tenant_id: str = Field(min_length=1, max_length=256)
+    subject_id: str = Field(min_length=1, max_length=256)
+    reason: str = Field(min_length=1, max_length=256)
+    cascade: bool
+
+
+class LifecycleCheckResponse(BaseModel):
+    status: Literal["absent", "residual", "not_configured"]
+    residual_count: int = Field(ge=0)
+    sample_ids: List[str] = Field(default_factory=list, max_length=20)
+
+
+class LifecycleEnumerationResponse(BaseModel):
+    tenant_id: str
+    subject_id: str
+    node_ids: List[str]
+    artifact_ids: List[str]
+
+
+class LifecycleVerificationResponse(BaseModel):
+    status: Literal["complete", "residual"]
+    checks: Dict[str, LifecycleCheckResponse]
+
+
+class LifecyclePurgeResponse(LifecycleVerificationResponse):
+    purged_count: int = Field(ge=0)
+    purged_node_ids: List[str]
+    artifact_ids: List[str]
 
 
 class NodeResponse(BaseModel):
