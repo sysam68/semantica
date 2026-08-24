@@ -1518,11 +1518,12 @@ for backend adapters such as KNX. They are not an end-user API and retain the
 existing `X-API-Key` protection:
 
 - `POST /api/lifecycle/subjects/enumerate` resolves a bounded tenant/subject
-  scope and its dependent KNX nodes;
+  scope and its dependent KNX nodes, optionally filtered by bounded KNX data
+  kinds for scoped forget;
 - `POST /api/lifecycle/subjects/purge` irreversibly purges that scope with a
   bounded reason and returns content-free verification evidence;
 - `POST /api/lifecycle/subjects/verify` rechecks supplied node/artifact IDs,
-  including after restart;
+  and the same optional data-kind scope, including after restart;
 - `DELETE /api/lifecycle/nodes/{node_id}` performs an explicitly scoped,
   explicitly cascaded generic node purge.
 

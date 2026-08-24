@@ -26,6 +26,16 @@ class ProblemDetails(BaseModel):
 
 
 LifecycleIdentifier = Annotated[str, Field(min_length=1, max_length=512)]
+LifecycleDataKind = Literal[
+    "interviews",
+    "observations",
+    "memories",
+    "inferences",
+    "knowledge_history",
+    "provenance",
+    "consents",
+    "audit_events",
+]
 
 
 class LifecycleScopeRequest(BaseModel):
@@ -35,6 +45,14 @@ class LifecycleScopeRequest(BaseModel):
     artifact_ids: List[LifecycleIdentifier] = Field(
         default_factory=list, max_length=5000
     )
+    kinds: List[LifecycleDataKind] = Field(default_factory=list, max_length=8)
+
+    @field_validator("kinds")
+    @classmethod
+    def unique_lifecycle_kinds(cls, value: List[str]) -> List[str]:
+        if len(value) != len(set(value)):
+            raise ValueError("lifecycle kinds must be unique")
+        return value
 
 
 class LifecyclePurgeRequest(LifecycleScopeRequest):
