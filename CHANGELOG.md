@@ -9,6 +9,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.1] - 2026-08-24
+
+### Added
+
+- Authenticated private lifecycle endpoints for bounded subject enumeration,
+  atomic purge, single-node purge, and multi-path absence verification.
+- Optional KNX data-kind filters for partial-forget verification while retained
+  interview snapshots remain available.
+
+### Changed
+
+- Explorer graph snapshots are persisted synchronously to FalkorDB, isolated by
+  graph namespace, and restored on application or database restart.
+- Lifecycle purge now fails closed on persistence outages, rolls back the
+  in-memory graph when the durable write fails, and verifies configured graph,
+  semantic, vector, provenance, temporal, cache, export, and restart paths.
+
 ## [0.7.0] - 2026-08-21
 
 ### Added
