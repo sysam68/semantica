@@ -51,6 +51,11 @@ def _artifact_id(node: Mapping[str, Any]) -> Optional[str]:
     return str(value) if value is not None else None
 
 
+def _data_kind(node: Mapping[str, Any]) -> Optional[str]:
+    value = _properties(node).get("knx_data_kind")
+    return str(value) if value is not None else None
+
+
 def _payload_digest(node: Mapping[str, Any]) -> str:
     encoded = json.dumps(_payload(node), sort_keys=True, separators=(",", ":")).encode()
     return hashlib.sha256(encoded).hexdigest()
@@ -87,12 +92,34 @@ class LifecycleService:
         self._session = session
         self._limit = limit
 
-    def scoped_nodes(self, tenant_id: str, subject_id: str) -> List[Dict[str, Any]]:
+    def scoped_nodes(
+        self,
+        tenant_id: str,
+        subject_id: str,
+        *,
+        kinds: Iterable[str] = (),
+    ) -> List[Dict[str, Any]]:
         nodes = self._session.lifecycle_nodes(limit=self._limit)
+        return self._select_scoped_nodes(
+            nodes,
+            tenant_id,
+            subject_id,
+            kinds=frozenset(str(kind) for kind in kinds),
+        )
+
+    def _select_scoped_nodes(
+        self,
+        nodes: List[Dict[str, Any]],
+        tenant_id: str,
+        subject_id: str,
+        *,
+        kinds: frozenset[str],
+    ) -> List[Dict[str, Any]]:
         selected = {
             str(node["id"]): node
             for node in nodes
             if _scope(node) == (tenant_id, subject_id)
+            and (not kinds or _data_kind(node) in kinds)
         }
         artifact_ids = {
             artifact_id
@@ -131,8 +158,14 @@ class LifecycleService:
         subject_id: str,
         *,
         reason: str,
+        kinds: Iterable[str] = (),
     ) -> tuple[List[str], List[str], Dict[str, Dict[str, Any]]]:
-        nodes = self.scoped_nodes(tenant_id, subject_id)
+        requested_kinds = tuple(str(kind) for kind in kinds)
+        nodes = self.scoped_nodes(
+            tenant_id,
+            subject_id,
+            kinds=requested_kinds,
+        )
         node_ids = [str(node["id"]) for node in nodes]
         artifact_ids = sorted(
             artifact_id
@@ -149,6 +182,7 @@ class LifecycleService:
             subject_id,
             node_ids=purged,
             artifact_ids=artifact_ids,
+            kinds=requested_kinds,
         )
         return purged, artifact_ids, checks
 
@@ -189,13 +223,20 @@ class LifecycleService:
         *,
         node_ids: Iterable[str],
         artifact_ids: Iterable[str],
+        kinds: Iterable[str] = (),
     ) -> Dict[str, Dict[str, Any]]:
         target_nodes = {str(value) for value in node_ids}
         target_artifacts = {str(value) for value in artifact_ids}
         nodes = self._session.lifecycle_nodes(limit=self._limit)
         live_ids = {str(node["id"]) for node in nodes}
+        requested_kinds = tuple(str(kind) for kind in kinds)
         scoped_ids = {
-            str(node["id"]) for node in self.scoped_nodes(tenant_id, subject_id)
+            str(node["id"])
+            for node in self.scoped_nodes(
+                tenant_id,
+                subject_id,
+                kinds=requested_kinds,
+            )
         }
         edges = list(self._session.graph.edges)
 
@@ -238,6 +279,7 @@ class LifecycleService:
             tenant_id,
             subject_id,
             target_nodes,
+            requested_kinds,
         )
         return checks
 
@@ -270,6 +312,7 @@ class LifecycleService:
         tenant_id: str,
         subject_id: str,
         target_nodes: set[str],
+        kinds: tuple[str, ...],
     ) -> Dict[str, Any]:
         snapshot = self._session.load_persisted_graph()
         if snapshot is None:
@@ -277,11 +320,17 @@ class LifecycleService:
         snapshot_nodes = _snapshot_nodes(snapshot)
         if len(snapshot_nodes) > self._limit:
             return self._check(["verification-limit-exceeded"])
-        residuals = []
-        for node in snapshot_nodes:
-            node_id = str(node.get("id", ""))
-            if node_id in target_nodes or _scope(node) == (tenant_id, subject_id):
-                residuals.append(node_id)
+        scoped_snapshot_ids = {
+            str(node["id"])
+            for node in self._select_scoped_nodes(
+                snapshot_nodes,
+                tenant_id,
+                subject_id,
+                kinds=frozenset(kinds),
+            )
+        }
+        snapshot_ids = {str(node.get("id", "")) for node in snapshot_nodes}
+        residuals = sorted(scoped_snapshot_ids | (target_nodes & snapshot_ids))
         return self._check(residuals)
 
     @staticmethod

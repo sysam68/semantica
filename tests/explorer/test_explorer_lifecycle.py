@@ -53,6 +53,7 @@ def node(
     subject: Optional[str] = None,
     target: Optional[str] = None,
     embedding: Optional[list[float]] = None,
+    data_kind: str = "observations",
 ) -> dict:
     payload: Dict[str, Any] = {
         "id": artifact_id,
@@ -64,6 +65,7 @@ def node(
         payload["target_id"] = target
     properties: Dict[str, Any] = {
         "knx_tenant_id": tenant,
+        "knx_data_kind": data_kind,
         "knx_payload": payload,
     }
     if target is not None:
@@ -259,6 +261,83 @@ def test_purge_failure_rolls_back_memory_and_returns_sanitized_503(
     assert failed.status_code == 503
     assert "falkordb" not in failed.text.lower()
     assert retained.status_code == 200
+
+
+def test_scoped_kind_purge_retains_other_subject_data_and_verifies_after_restart(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("SEMANTICA_API_KEY", "test-api-key")
+    shared: Dict[str, Any] = {}
+    with TestClient(
+        create_app(snapshot_repository=MemorySnapshotRepository(shared))
+    ) as client:
+        import_nodes(
+            client,
+            [
+                node(
+                    "scoped-observation",
+                    tenant="tenant-one",
+                    artifact_id="scoped-observation",
+                    subject="subject-one",
+                    data_kind="observations",
+                ),
+                node(
+                    "retained-memory",
+                    tenant="tenant-one",
+                    artifact_id="retained-memory",
+                    subject="subject-one",
+                    data_kind="memories",
+                ),
+            ],
+        )
+        purged = client.post(
+            "/api/lifecycle/subjects/purge",
+            headers={"X-API-Key": "test-api-key"},
+            json={
+                "tenant_id": "tenant-one",
+                "subject_id": "subject-one",
+                "kinds": ["observations"],
+                "reason": "authorized scoped forget",
+            },
+        )
+        retained = client.get(
+            "/api/graph/node/retained-memory",
+            headers={"X-API-Key": "test-api-key"},
+        )
+
+    assert purged.status_code == 200
+    evidence = purged.json()
+    assert evidence["status"] == "complete"
+    assert evidence["purged_node_ids"] == ["scoped-observation"]
+    assert retained.status_code == 200
+
+    with TestClient(
+        create_app(snapshot_repository=MemorySnapshotRepository(shared))
+    ) as restarted:
+        verified = restarted.post(
+            "/api/lifecycle/subjects/verify",
+            headers={"X-API-Key": "test-api-key"},
+            json={
+                "tenant_id": "tenant-one",
+                "subject_id": "subject-one",
+                "kinds": ["observations"],
+                "node_ids": evidence["purged_node_ids"],
+                "artifact_ids": evidence["artifact_ids"],
+            },
+        )
+        memories = restarted.post(
+            "/api/lifecycle/subjects/enumerate",
+            headers={"X-API-Key": "test-api-key"},
+            json={
+                "tenant_id": "tenant-one",
+                "subject_id": "subject-one",
+                "kinds": ["memories"],
+            },
+        )
+
+    assert verified.status_code == 200
+    assert verified.json()["status"] == "complete"
+    assert memories.json()["node_ids"] == ["retained-memory"]
 
 
 def test_purge_reports_provenance_residual_without_subject_content(

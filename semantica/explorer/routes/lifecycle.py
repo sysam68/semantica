@@ -46,7 +46,11 @@ async def enumerate_subject(
     session: GraphSession = Depends(get_session),
 ):
     service = LifecycleService(session)
-    nodes = service.scoped_nodes(body.tenant_id, body.subject_id)
+    nodes = service.scoped_nodes(
+        body.tenant_id,
+        body.subject_id,
+        kinds=body.kinds,
+    )
     return LifecycleEnumerationResponse(
         tenant_id=body.tenant_id,
         subject_id=body.subject_id,
@@ -72,6 +76,7 @@ async def verify_subject(
         body.subject_id,
         node_ids=body.node_ids,
         artifact_ids=body.artifact_ids,
+        kinds=body.kinds,
     )
     return LifecycleVerificationResponse(
         status=_response_status(checks),
@@ -91,6 +96,7 @@ async def purge_subject(
         body.tenant_id,
         body.subject_id,
         reason=_validated_reason(body.reason),
+        kinds=body.kinds,
     )
     return LifecyclePurgeResponse(
         status=_response_status(checks),
