@@ -10,6 +10,7 @@ from typing import Any, Dict, List, Optional
 from .session import GraphSession
 
 MAX_LIFECYCLE_NODES = 5000
+PUBLICATION_DATA_KIND = "publications"
 _REFERENCE_KEYS = frozenset(
     {
         "target_id",
@@ -115,12 +116,19 @@ class LifecycleService:
         *,
         kinds: frozenset[str],
     ) -> List[Dict[str, Any]]:
-        selected = {
-            str(node["id"]): node
-            for node in nodes
-            if _scope(node) == (tenant_id, subject_id)
-            and (not kinds or _data_kind(node) in kinds)
-        }
+        selected: Dict[str, Dict[str, Any]] = {}
+        for node in nodes:
+            node_tenant, node_subject = _scope(node)
+            data_kind = _data_kind(node)
+            kind_matches = not kinds or data_kind in kinds
+            exact_scope = (node_tenant, node_subject) == (tenant_id, subject_id)
+            subject_owned_publication = (
+                PUBLICATION_DATA_KIND in kinds
+                and data_kind == PUBLICATION_DATA_KIND
+                and node_subject == subject_id
+            )
+            if kind_matches and (exact_scope or subject_owned_publication):
+                selected[str(node["id"])] = node
         artifact_ids = {
             artifact_id
             for node in selected.values()
