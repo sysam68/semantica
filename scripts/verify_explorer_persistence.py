@@ -35,13 +35,14 @@ def request(
     api_key: str | None = None,
     body: bytes | None = None,
     content_type: str | None = None,
+    method: str | None = None,
 ) -> tuple[int, dict]:
     headers = {}
     if api_key:
         headers["X-API-Key"] = api_key
     if content_type:
         headers["Content-Type"] = content_type
-    outbound = urllib.request.Request(url, data=body, headers=headers)
+    outbound = urllib.request.Request(url, data=body, headers=headers, method=method)
     try:
         with urllib.request.urlopen(outbound, timeout=5) as response:
             return response.status, json.load(response)
@@ -72,6 +73,16 @@ def multipart_graph(node_id: str) -> tuple[bytes, str]:
         f"{graph}\r\n--{boundary}--\r\n"
     ).encode()
     return body, f"multipart/form-data; boundary={boundary}"
+
+
+def post_json(url: str, payload: dict) -> tuple[int, dict]:
+    return request(
+        url,
+        api_key=API_KEY,
+        body=json.dumps(payload).encode(),
+        content_type="application/json",
+        method="POST",
+    )
 
 
 def start_explorer(name: str, network: str, namespace: str) -> str:
@@ -162,7 +173,84 @@ def main() -> None:
                 f"{isolated_url}/api/graph/node/durable-node-0", api_key=API_KEY
             )
             assert status == 404
-            print("Explorer persistence acceptance passed twice")
+
+            docker("rm", "-f", isolated)
+            base_url = start_explorer(explorer, network, "primary")
+            boundary = "semantica-lifecycle-boundary"
+            lifecycle_graph = json.dumps(
+                {
+                    "nodes": [
+                        {
+                            "id": "lifecycle-primary",
+                            "type": "knx__memory__tenant-primary",
+                            "properties": {
+                                "knx_tenant_id": "tenant-primary",
+                                "knx_payload": {
+                                    "id": "memory-primary",
+                                    "tenant_id": "tenant-primary",
+                                    "subject_id": "subject-primary",
+                                },
+                            },
+                        },
+                        {
+                            "id": "lifecycle-foreign",
+                            "type": "knx__memory__tenant-primary",
+                            "properties": {
+                                "knx_tenant_id": "tenant-primary",
+                                "knx_payload": {
+                                    "id": "memory-foreign",
+                                    "tenant_id": "tenant-primary",
+                                    "subject_id": "subject-foreign",
+                                },
+                            },
+                        },
+                    ],
+                    "edges": [],
+                }
+            )
+            lifecycle_body = (
+                f"--{boundary}\r\n"
+                'Content-Disposition: form-data; name="file"; '
+                'filename="lifecycle.json"\r\n'
+                "Content-Type: application/json\r\n\r\n"
+                f"{lifecycle_graph}\r\n--{boundary}--\r\n"
+            ).encode()
+            status, _ = request(
+                f"{base_url}/api/import",
+                api_key=API_KEY,
+                body=lifecycle_body,
+                content_type=f"multipart/form-data; boundary={boundary}",
+            )
+            assert status == 200
+            status, evidence = post_json(
+                f"{base_url}/api/lifecycle/subjects/purge",
+                {
+                    "tenant_id": "tenant-primary",
+                    "subject_id": "subject-primary",
+                    "reason": "automated acceptance",
+                },
+            )
+            assert status == 200 and evidence["status"] == "complete"
+            status, _ = request(
+                f"{base_url}/api/graph/node/lifecycle-foreign", api_key=API_KEY
+            )
+            assert status == 200
+            docker("rm", "-f", explorer)
+            base_url = start_explorer(explorer, network, "primary")
+            status, verification = post_json(
+                f"{base_url}/api/lifecycle/subjects/verify",
+                {
+                    "tenant_id": "tenant-primary",
+                    "subject_id": "subject-primary",
+                    "node_ids": evidence["purged_node_ids"],
+                    "artifact_ids": evidence["artifact_ids"],
+                },
+            )
+            assert status == 200 and verification["status"] == "complete"
+            print(
+                "Explorer persistence acceptance passed twice; "
+                "lifecycle restart acceptance passed"
+            )
         finally:
             subprocess.run(
                 ["docker", "rm", "-f", explorer, isolated, database],

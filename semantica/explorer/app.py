@@ -256,6 +256,7 @@ def create_app(
     from .routes.enrich import router as enrich_router
     from .routes.export_import import router as export_import_router
     from .routes.graph import router as graph_router
+    from .routes.lifecycle import router as lifecycle_router
     from .routes.ontology import router as ontology_router
     from .routes.provenance import router as provenance_router
     from .routes.sparql import router as sparql_router
@@ -264,6 +265,7 @@ def create_app(
 
     _auth = [Depends(require_auth)]
     app.include_router(graph_router, dependencies=_auth)
+    app.include_router(lifecycle_router, dependencies=_auth)
     app.include_router(analytics_router, dependencies=_auth)
     app.include_router(decisions_router, dependencies=_auth)
     app.include_router(temporal_router, dependencies=_auth)
