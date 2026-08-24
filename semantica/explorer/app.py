@@ -4,18 +4,37 @@ Semantica Explorer FastAPI application factory.
 
 import asyncio
 import os
+import stat
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Optional
 
-from fastapi import Depends, FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
+from fastapi import (
+    Depends,
+    FastAPI,
+    HTTPException,
+    Request,
+    WebSocket,
+    WebSocketDisconnect,
+)
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from .. import __version__
 from ..context.context_graph import ContextGraph
-from .dependencies import anonymous_access_allowed, get_expected_api_key, is_valid_api_key, require_auth
+from .dependencies import (
+    anonymous_access_allowed,
+    get_expected_api_key,
+    is_valid_api_key,
+    require_auth,
+)
+from .falkordb_snapshot import (
+    FalkorDBGraphSnapshotRepository,
+    SnapshotPersistenceUnavailable,
+)
+from .ports import GraphSnapshotRepository
+from .schemas import HealthResponse, ProblemDetails
 from .session import GraphSession
 from .ws import ConnectionManager
 
@@ -30,6 +49,30 @@ def _read_int_env(name: str, default: int) -> int:
         return default
 
 
+def _read_bool_env(name: str, default: bool) -> bool:
+    value = os.environ.get(name)
+    if value is None:
+        return default
+    normalized = value.strip().lower()
+    if normalized not in {"true", "false"}:
+        raise ValueError(f"{name} must be true or false")
+    return normalized == "true"
+
+
+def _read_private_secret(path_value: Optional[str]) -> Optional[str]:
+    if path_value is None or not path_value.strip():
+        return None
+    path = Path(path_value)
+    if not path.is_absolute() or path.is_symlink() or not path.is_file():
+        raise ValueError("FALKORDB_PASSWORD_FILE must be an absolute regular file")
+    if stat.S_IMODE(path.stat().st_mode) & 0o077:
+        raise ValueError("FALKORDB_PASSWORD_FILE must not grant group or other access")
+    value = path.read_text(encoding="utf-8").strip()
+    if not value or any(character.isspace() for character in value):
+        raise ValueError("FALKORDB_PASSWORD_FILE contains an invalid secret")
+    return value
+
+
 def _read_explorer_settings() -> dict:
     if "ALLOWED_ORIGINS" in os.environ:
         raw_origins = os.environ["ALLOWED_ORIGINS"]
@@ -41,11 +84,16 @@ def _read_explorer_settings() -> dict:
         "allowed_origins": [
             origin.strip() for origin in raw_origins.split(",") if origin.strip()
         ],
-        # These are read and stored for future use when direct FalkorDB connection
-        # support is added to the Explorer. Currently GraphSession uses an in-memory
-        # ContextGraph and does not open a network connection to FalkorDB.
         "falkordb_host": os.environ.get("FALKORDB_HOST", "localhost"),
         "falkordb_port": _read_int_env("FALKORDB_PORT", 6379),
+        "falkordb_graph_name": os.environ.get(
+            "FALKORDB_GRAPH_NAME", "semantica_explorer"
+        ),
+        "falkordb_password": _read_private_secret(
+            os.environ.get("FALKORDB_PASSWORD_FILE")
+        ),
+        "graph_namespace": os.environ.get("SEMANTICA_GRAPH_NAMESPACE", "default"),
+        "persistence_required": _read_bool_env("SEMANTICA_PERSISTENCE_REQUIRED", False),
         "provenance_storage_path": os.environ.get(
             "SEMANTICA_PROVENANCE_DB",
             os.environ.get("EXPLORER_PROVENANCE_DB"),
@@ -61,6 +109,7 @@ def _install_mutation_bridge(app: FastAPI, session: GraphSession) -> None:
 
     def on_mutation(event_type: str, entity_id: str, payload: dict) -> None:
         session.handle_graph_mutation(event_type, entity_id, payload)
+        session.persist_graph()
         if callable(previous_callback):
             previous_callback(event_type, entity_id, payload)
         loop = getattr(app.state, "event_loop", None)
@@ -83,13 +132,33 @@ def _install_mutation_bridge(app: FastAPI, session: GraphSession) -> None:
 def create_app(
     session: Optional[GraphSession] = None,
     provenance_storage_path: Optional[str] = None,
+    snapshot_repository: Optional[GraphSnapshotRepository] = None,
 ) -> FastAPI:
+    if session is not None and snapshot_repository is not None:
+        raise ValueError("session and snapshot_repository are mutually exclusive")
     settings = _read_explorer_settings()
     prov_path = provenance_storage_path or settings.get("provenance_storage_path")
     if session is None:
+        if snapshot_repository is None and settings["persistence_required"]:
+            snapshot_repository = FalkorDBGraphSnapshotRepository(
+                host=settings["falkordb_host"],
+                port=settings["falkordb_port"],
+                graph_name=settings["falkordb_graph_name"],
+                namespace=settings["graph_namespace"],
+                password=settings["falkordb_password"],
+            )
+        graph = ContextGraph(
+            advanced_analytics=False,
+            strict_mutation_callback=snapshot_repository is not None,
+        )
+        if snapshot_repository is not None:
+            snapshot = snapshot_repository.load()
+            if snapshot is not None:
+                graph.from_dict(snapshot)
         active_session = GraphSession(
-            ContextGraph(advanced_analytics=False),
+            graph,
             provenance_storage_path=prov_path,
+            snapshot_repository=snapshot_repository,
         )
     else:
         active_session = session
@@ -99,6 +168,7 @@ def create_app(
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         import logging as _lifespan_logging
+
         _lifespan_logger = _lifespan_logging.getLogger(__name__)
         if anonymous_access_allowed():
             _lifespan_logger.warning(
@@ -107,7 +177,9 @@ def create_app(
                 "process beyond localhost."
             )
         elif get_expected_api_key():
-            _lifespan_logger.info("Explorer API authentication: enabled (SEMANTICA_API_KEY set).")
+            _lifespan_logger.info(
+                "Explorer API authentication: enabled (SEMANTICA_API_KEY set)."
+            )
         else:
             _lifespan_logger.warning(
                 "Explorer API authentication: NOT CONFIGURED. All protected "
@@ -119,10 +191,13 @@ def create_app(
         app.state.session = active_session
         _install_mutation_bridge(app, active_session)
         yield
+        active_session.close()
 
     app = FastAPI(
         title="Semantica Knowledge Explorer",
-        description="Interactive dashboard API for exploring Semantica knowledge graphs.",
+        description=(
+            "Interactive dashboard API for exploring Semantica knowledge graphs."
+        ),
         version=__version__,
         lifespan=lifespan,
     )
@@ -134,7 +209,9 @@ def create_app(
     # enabling them when origins are broadened creates cross-site request
     # risk. Set EXPLORER_CORS_CREDENTIALS=true explicitly to opt in (e.g.
     # for a reverse-proxy setup that injects its own cookie-based auth).
-    _allow_credentials = os.environ.get("EXPLORER_CORS_CREDENTIALS", "false").lower() == "true"
+    _allow_credentials = (
+        os.environ.get("EXPLORER_CORS_CREDENTIALS", "false").lower() == "true"
+    )
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings["allowed_origins"],
@@ -145,6 +222,7 @@ def create_app(
     )
 
     import logging as _logging
+
     _logger = _logging.getLogger(__name__)
 
     @app.exception_handler(KeyError)
@@ -162,7 +240,15 @@ def create_app(
         if isinstance(exc, HTTPException):
             raise exc
         _logger.exception("Unhandled exception")
-        return JSONResponse(status_code=500, content={"detail": "Internal server error"})
+        return JSONResponse(
+            status_code=500, content={"detail": "Internal server error"}
+        )
+
+    @app.exception_handler(SnapshotPersistenceUnavailable)
+    async def persistence_error_handler(
+        request: Request, _exc: SnapshotPersistenceUnavailable
+    ):
+        return _durable_graph_problem(request)
 
     from .routes.analytics import router as analytics_router
     from .routes.annotations import router as annotations_router
@@ -213,7 +299,9 @@ def create_app(
         # Browsers can't set custom headers on a WebSocket handshake, so
         # accept the key via header (non-browser clients) or query param
         # (browser clients), same SEMANTICA_API_KEY the REST routes check.
-        candidate = websocket.headers.get("x-api-key") or websocket.query_params.get("api_key")
+        candidate = websocket.headers.get("x-api-key") or websocket.query_params.get(
+            "api_key"
+        )
         if not is_valid_api_key(candidate):
             await websocket.close(code=4401)  # unauthorized
             return
@@ -244,9 +332,9 @@ def create_app(
         )
         return HTMLResponse(
             '<!doctype html><html lang="en"><head><meta charset="UTF-8">'
-            '<title>Semantica Knowledge Explorer</title>'
-            '<style>body{font-family:sans-serif;padding:2rem;max-width:600px;margin:auto}'
-            'code{background:#f4f4f4;padding:2px 6px;border-radius:3px}</style></head>'
+            "<title>Semantica Knowledge Explorer</title>"
+            "<style>body{font-family:sans-serif;padding:2rem;max-width:600px;margin:auto}"
+            "code{background:#f4f4f4;padding:2px 6px;border-radius:3px}</style></head>"
             "<body><h2>Explorer UI not available</h2>"
             "<p>The frontend bundle was not found. This usually means the package was "
             "installed from source without building the frontend first.</p>"
@@ -259,9 +347,25 @@ def create_app(
             status_code=200,
         )
 
-    @app.get("/api/health")
-    async def health():
-        return {"status": "ok"}
+    @app.get(
+        "/api/health",
+        response_model=HealthResponse,
+        status_code=200,
+        responses={
+            503: {
+                "description": "The durable graph dependency is unavailable.",
+                "content": {
+                    "application/problem+json": {
+                        "schema": ProblemDetails.model_json_schema()
+                    }
+                },
+            }
+        },
+    )
+    async def health(request: Request):
+        if not active_session.persistence_healthy():
+            return _durable_graph_problem(request)
+        return HealthResponse(status="ok")
 
     @app.get("/api/info")
     async def info():
@@ -287,6 +391,20 @@ def create_app(
             raise HTTPException(status_code=404, detail="Frontend build missing")
 
     return app
+
+
+def _durable_graph_problem(request: Request) -> JSONResponse:
+    return JSONResponse(
+        status_code=503,
+        media_type="application/problem+json",
+        content={
+            "type": "urn:semantica:problem:durable-graph-unavailable",
+            "title": "Durable graph unavailable",
+            "status": 503,
+            "detail": "The durable graph dependency is unavailable.",
+            "instance": request.url.path,
+        },
+    )
 
 
 # Module-level app instance used by uvicorn and Docker CMD.

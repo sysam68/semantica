@@ -1488,6 +1488,29 @@ volume, so recreating the database container does not remove its data.
 It is mounted at FalkorDB's effective Redis data directory,
 `/var/lib/falkordb/data`.
 
+Explorer treats FalkorDB as its authoritative durable graph boundary. At
+startup it loads the snapshot selected by `FALKORDB_GRAPH_NAME` and
+`SEMANTICA_GRAPH_NAMESPACE`; every accepted graph mutation updates that
+snapshot. Docker enables `SEMANTICA_PERSISTENCE_REQUIRED=true`, waits for
+FalkorDB health, and reports the Explorer unhealthy if the dependency becomes
+unavailable. Different evaluation runs must use different namespaces to avoid
+cross-run data leakage.
+
+Run the automated restart and namespace-isolation acceptance test after
+building the image:
+
+```bash
+docker build -t semantica-knowledge-explorer:latest .
+python scripts/verify_explorer_persistence.py
+```
+
+For a non-destructive evaluation reset, assign a new
+`SEMANTICA_GRAPH_NAMESPACE`; retaining the previous namespace preserves its
+evidence for later inspection. Reuse the same namespace when migrating or
+recreating containers. Physical deletion below `${DATA_ROOT}/falkordb/data`
+is an operator action reserved for an explicitly disposable data root after
+the stack is stopped and the target path has been verified.
+
 ---
 
 ## What's New in v0.7.0

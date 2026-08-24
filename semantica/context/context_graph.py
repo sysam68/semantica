@@ -828,6 +828,8 @@ class ContextGraph:
             try:
                 self.mutation_callback("UPDATE_NODE", node_id, node.to_dict())
             except Exception as e:
+                if self.config.get("strict_mutation_callback", False):
+                    raise
                 self.logger.warning(f"Audit trail callback failed for node {node_id}: {e}")
 
     def get_edge_data(self, source_id: str, target_id: str) -> Dict[str, Any]:
@@ -1989,6 +1991,8 @@ class ContextGraph:
             try:
                 self.mutation_callback("ADD_NODE", node.node_id, node.to_dict())
             except Exception as e:
+                if self.config.get("strict_mutation_callback", False):
+                    raise
                 self.logger.warning(f"Audit trail callback failed for node {node.node_id}: {e}")
         return True
     
@@ -2024,6 +2028,8 @@ class ContextGraph:
             try:
                 self.mutation_callback("ADD_EDGE", edge.edge_id, edge.to_dict())
             except Exception as e:
+                if self.config.get("strict_mutation_callback", False):
+                    raise
                 self.logger.warning(
                     f"Audit trail callback failed for edge {edge.edge_id}: {e}"
                 )
@@ -2045,6 +2051,8 @@ class ContextGraph:
         try:
             self.mutation_callback(operation, entity_id, payload)
         except Exception as e:
+            if self.config.get("strict_mutation_callback", False):
+                raise
             self.logger.warning(
                 f"Audit trail callback failed for {operation} {entity_id}: {e}"
             )

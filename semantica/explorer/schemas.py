@@ -13,6 +13,18 @@ class ErrorResponse(BaseModel):
     status_code: int = 500
 
 
+class HealthResponse(BaseModel):
+    status: Literal["ok"] = "ok"
+
+
+class ProblemDetails(BaseModel):
+    type: str
+    title: str
+    status: int
+    detail: str
+    instance: Optional[str] = None
+
+
 class NodeResponse(BaseModel):
     id: str
     type: str
