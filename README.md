@@ -1519,7 +1519,8 @@ existing `X-API-Key` protection:
 
 - `POST /api/lifecycle/subjects/enumerate` resolves a bounded tenant/subject
   scope and its dependent KNX nodes, optionally filtered by bounded KNX data
-  kinds for scoped forget;
+  kinds for scoped forget, including subject-owned `subjects` profile
+  artifacts;
 - `POST /api/lifecycle/subjects/purge` irreversibly purges that scope with a
   bounded reason and returns content-free verification evidence;
 - `POST /api/lifecycle/subjects/verify` rechecks supplied node/artifact IDs,
