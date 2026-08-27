@@ -16,13 +16,12 @@ permissions:
 jobs:
   release:
     runs-on: ubuntu-latest
-    environment: pypi
     concurrency:
       group: release-${{ inputs.tag || github.ref }}
       cancel-in-progress: false
     permissions:
       contents: write      # for the GitHub Release
-      id-token: write      # for PyPI Trusted Publishing (OIDC) and attestation signing
+      id-token: write      # for SLSA build provenance attestation signing
       attestations: write  # for SLSA build provenance
     # If you add another job to this workflow, give it its own explicit
     # `permissions:` block rather than relying on the workflow-level default
@@ -88,4 +87,3 @@ jobs:
         with:
           tag_name: ${{ inputs.tag || github.ref_name }}
           files: dist/*
-      - uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # release/v1
