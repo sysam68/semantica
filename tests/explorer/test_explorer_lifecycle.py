@@ -340,6 +340,137 @@ def test_scoped_kind_purge_retains_other_subject_data_and_verifies_after_restart
     assert memories.json()["node_ids"] == ["retained-memory"]
 
 
+def test_subject_profile_lifecycle_is_tenant_and_subject_scoped(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("SEMANTICA_API_KEY", "test-api-key")
+    with TestClient(create_app()) as client:
+        import_nodes(
+            client,
+            [
+                node(
+                    "subject-profile",
+                    tenant="tenant-one",
+                    artifact_id="subject-one",
+                    subject="subject-one",
+                    data_kind="subjects",
+                ),
+                node(
+                    "other-subject-profile",
+                    tenant="tenant-one",
+                    artifact_id="subject-two",
+                    subject="subject-two",
+                    data_kind="subjects",
+                ),
+                node(
+                    "other-tenant-profile",
+                    tenant="tenant-two",
+                    artifact_id="subject-one",
+                    subject="subject-one",
+                    data_kind="subjects",
+                ),
+                node(
+                    "subject-observation",
+                    tenant="tenant-one",
+                    artifact_id="observation-one",
+                    subject="subject-one",
+                    data_kind="observations",
+                ),
+            ],
+        )
+        enumerated = client.post(
+            "/api/lifecycle/subjects/enumerate",
+            headers={"X-API-Key": "test-api-key"},
+            json={
+                "tenant_id": "tenant-one",
+                "subject_id": "subject-one",
+                "kinds": ["subjects"],
+            },
+        )
+        residual = client.post(
+            "/api/lifecycle/subjects/verify",
+            headers={"X-API-Key": "test-api-key"},
+            json={
+                "tenant_id": "tenant-one",
+                "subject_id": "subject-one",
+                "kinds": ["subjects"],
+                "node_ids": ["subject-profile"],
+                "artifact_ids": ["subject-one"],
+            },
+        )
+        purged = client.post(
+            "/api/lifecycle/subjects/purge",
+            headers={"X-API-Key": "test-api-key"},
+            json={
+                "tenant_id": "tenant-one",
+                "subject_id": "subject-one",
+                "kinds": ["subjects"],
+                "reason": "authorized subject profile erasure",
+            },
+        )
+        verified = client.post(
+            "/api/lifecycle/subjects/verify",
+            headers={"X-API-Key": "test-api-key"},
+            json={
+                "tenant_id": "tenant-one",
+                "subject_id": "subject-one",
+                "kinds": ["subjects"],
+                "node_ids": purged.json()["purged_node_ids"],
+                "artifact_ids": purged.json()["artifact_ids"],
+            },
+        )
+        retained = {
+            node_id: client.get(
+                f"/api/graph/node/{node_id}",
+                headers={"X-API-Key": "test-api-key"},
+            ).status_code
+            for node_id in (
+                "other-subject-profile",
+                "other-tenant-profile",
+                "subject-observation",
+            )
+        }
+
+    assert enumerated.status_code == 200
+    assert enumerated.json()["node_ids"] == ["subject-profile"]
+    assert enumerated.json()["artifact_ids"] == ["subject-one"]
+    assert residual.status_code == 200
+    assert residual.json()["status"] == "residual"
+    assert residual.json()["checks"]["enumeration"]["sample_ids"] == ["subject-profile"]
+    assert purged.status_code == 200
+    assert purged.json()["status"] == "complete"
+    assert purged.json()["purged_node_ids"] == ["subject-profile"]
+    assert verified.status_code == 200
+    assert verified.json()["status"] == "complete"
+    assert retained == {
+        "other-subject-profile": 200,
+        "other-tenant-profile": 200,
+        "subject-observation": 200,
+    }
+
+
+def test_openapi_accepts_subjects_as_a_lifecycle_data_kind() -> None:
+    with TestClient(create_app()) as client:
+        schema = client.get("/openapi.json").json()
+
+    kinds = schema["components"]["schemas"]["LifecycleScopeRequest"]["properties"][
+        "kinds"
+    ]
+    assert kinds["maxItems"] == 10
+    assert kinds["items"]["enum"] == [
+        "subjects",
+        "interviews",
+        "observations",
+        "memories",
+        "inferences",
+        "knowledge_history",
+        "provenance",
+        "consents",
+        "audit_events",
+        "publications",
+    ]
+
+
 def test_publication_lifecycle_crosses_department_tenants_only_for_the_owner(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

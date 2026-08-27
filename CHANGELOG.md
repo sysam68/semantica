@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.2] - 2026-08-27
+
+### Fixed
+
+- The authenticated private lifecycle contract now accepts KNX `subjects`
+  profile artifacts for scoped enumeration, verification, purge, and residual
+  evidence while preserving tenant and subject isolation.
+
 ## [0.7.1] - 2026-08-24
 
 ### Added
