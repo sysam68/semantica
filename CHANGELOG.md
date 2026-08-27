@@ -9,6 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.3] - 2026-08-27
+
+### Changed
+
+- Personal repository releases are now distributed exclusively through GitHub
+  Releases with provenance attestations; the workflow no longer publishes to
+  PyPI or uses a PyPI deployment environment.
+- GitHub CodeQL action pins were refreshed to the current immutable `v4` SHA.
+
 ## [0.7.2] - 2026-08-27
 
 ### Fixed
