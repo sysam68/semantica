@@ -23,6 +23,8 @@ services:
     environment:
       FALKORDB_HOST: falkordb
       FALKORDB_PORT: "6379"
+      # The Explorer reads the FalkorDB password from a private file (absolute path, regular file, not group or world accessible).
+      FALKORDB_PASSWORD_FILE: /run/secrets/falkordb-password
       FALKORDB_GRAPH_NAME: ${FALKORDB_GRAPH_NAME:-semantica_explorer}
       SEMANTICA_GRAPH_NAMESPACE: ${SEMANTICA_GRAPH_NAMESPACE:-default}
       SEMANTICA_PERSISTENCE_REQUIRED: "true"
@@ -35,7 +37,10 @@ services:
       VECTOR_STORE_DEFAULT_BACKEND: ${VECTOR_STORE_DEFAULT_BACKEND:-qdrant}
       VECTOR_STORE_DIMENSION: ${VECTOR_STORE_DIMENSION:-768}
       VECTOR_STORE_QDRANT_URL: ${VECTOR_STORE_QDRANT_URL:-http://qdrant-mem0:6333}
-      VECTOR_STORE_QDRANT_API_KEY: ${VECTOR_STORE_QDRANT_API_KEY:-}
+      # The shared Qdrant (mem0-qdrant, OB-TOOLS deploy/mem0) enforces one API key: the one mem0-api uses.
+      VECTOR_STORE_QDRANT_API_KEY: ${VECTOR_STORE_QDRANT_API_KEY:?VECTOR_STORE_QDRANT_API_KEY must be set in .env (the key of mem0-qdrant)}
+    secrets:
+      - falkordb-password
     depends_on:
       falkordb:
         condition: service_healthy
@@ -51,6 +56,10 @@ services:
 
   falkordb:
     image: falkordb/falkordb:latest
+    environment:
+      # The server requires the password; REDISCLI_AUTH makes redis-cli (the health check) authenticate with it. No port is published.
+      REDIS_ARGS: "--requirepass ${FALKORDB_PASSWORD:?FALKORDB_PASSWORD must be set in .env}"
+      REDISCLI_AUTH: ${FALKORDB_PASSWORD}
     depends_on:
       volume-init:
         condition: service_completed_successfully
@@ -65,6 +74,11 @@ services:
       retries: 10
       start_period: 10s
     restart: unless-stopped
+
+secrets:
+  falkordb-password:
+    # The same password as FALKORDB_PASSWORD, in a file only its owner can read (OB-TOOLS scripts/provision-platform-secrets.sh creates both).
+    file: ./secrets/falkordb-password
 
 networks:
   front-net:
